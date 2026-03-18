@@ -16,6 +16,54 @@ let workersCache = [];
 const terminalJobStatuses = ['Paid', 'Cancelled', 'Rejected', 'Expired'];
 const actionableCustomerStatuses = ['Accepted', 'On the Way', 'Reached', 'Completed', 'Pending'];
 
+function setInlineMessage(elementId, message = '', tone = 'info') {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (!message) {
+        el.classList.add('hidden');
+        el.textContent = '';
+        if (elementId === 'partner-status-banner') {
+            const inner = el.querySelector('div');
+            if (inner) inner.textContent = '';
+        }
+        return;
+    }
+
+    const styles = {
+        info: ['bg-indigo-50', 'text-indigo-700', 'border', 'border-indigo-100'],
+        success: ['bg-emerald-50', 'text-emerald-700', 'border', 'border-emerald-100'],
+        error: ['bg-rose-50', 'text-rose-700', 'border', 'border-rose-100']
+    };
+    const toneClasses = styles[tone] || styles.info;
+
+    if (elementId === 'partner-status-banner') {
+        const inner = el.querySelector('div');
+        if (!inner) return;
+        inner.className = `glass-card px-4 py-3 text-center text-sm font-bold ${toneClasses.join(' ')}`;
+        inner.textContent = message;
+        el.classList.remove('hidden');
+        return;
+    }
+
+    el.className = `mb-6 rounded-2xl px-4 py-3 text-sm font-bold ${toneClasses.join(' ')}`;
+    el.textContent = message;
+    el.classList.remove('hidden');
+}
+
+function clearInlineMessages() {
+    ['auth-status', 'booking-status', 'partner-status-banner'].forEach((id) => setInlineMessage(id, ''));
+}
+
+function showAppFeedback(message, tone = 'info') {
+    const targets = ['partner-status-banner', 'booking-status', 'auth-status'];
+    const availableTarget = targets.find((id) => document.getElementById(id));
+    if (availableTarget) {
+        setInlineMessage(availableTarget, message, tone);
+    } else {
+        console.log(message);
+    }
+}
+
 // Role enforcement logic
 const userRole = localStorage.getItem('userRole'); // New constant
 const currentPath = window.location.pathname; // New constant
@@ -446,12 +494,12 @@ async function updateJobStatusManual() {
         updateTrackingUI(nextStatus);
 
         if (data.mail && !data.mail.success) {
-            alert(`Status updated, but email sending failed: ${data.mail.error}`);
+            showAppFeedback(`Status updated, but email sending failed: ${data.mail.error}`, 'error');
         } else if (nextStatus === "Completed") {
-            alert("Work finished. Bill PDF sent to the customer email.");
+            showAppFeedback("Work finished. Bill PDF sent to the customer email.", 'success');
         } else if (nextStatus === "Paid") {
             setTimeout(() => {
-                alert("Payment successful. Receipt PDF sent to the customer email.");
+                showAppFeedback("Payment successful. Receipt PDF sent to the customer email.", 'success');
                 toggleTracking('partner', false);
                 activeJob = null;
             }, 2000);
@@ -460,7 +508,7 @@ async function updateJobStatusManual() {
         renderStatusActionButton();
     } catch (err) {
         console.error("Status update error:", err);
-        alert(err.message || "Status update failed");
+        showAppFeedback(err.message || "Status update failed", 'error');
     }
 }
 
@@ -526,8 +574,7 @@ function hireWorker(id, name, skill, price, photo_url) {
         openAuthModal();
         return;
     }
-
-    if (!confirm(`Do you want to send a service request to ${name}?`)) return;
+    setInlineMessage('booking-status', '');
 
     // Show booking modal instead of instant tracking
     document.getElementById('booking-name').innerText = name;
@@ -562,14 +609,14 @@ function hireWorker(id, name, skill, price, photo_url) {
         activeJob = data.job;
         renderCustomerActiveJob(activeJob);
         updateTrackingUI(activeJob.status || 'Pending');
-        alert(data.message || 'Request sent to partner successfully.');
+        setInlineMessage('booking-status', data.message || 'Request sent to partner successfully.', 'success');
         // Polling will handle closing the calling modal when status changes from Pending
         startStatusPolling();
     })
     .catch(err => {
         document.getElementById('booking-modal')?.classList.add('hidden');
         if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
-        alert(err.message || "Failed to initiate hiring");
+        setInlineMessage('booking-status', err.message || "Failed to initiate hiring", 'error');
     });
 }
 
@@ -582,7 +629,7 @@ function requestNearbyPartners() {
 
     const filteredWorkers = getFilteredWorkersList();
     if (filteredWorkers.length === 0) {
-        alert("No nearby partners found for this filter.");
+        setInlineMessage('booking-status', 'No nearby partners found for this filter.', 'error');
         return;
     }
 
@@ -622,13 +669,13 @@ function requestNearbyPartners() {
         activeJob = data.job;
         renderCustomerActiveJob(activeJob);
         updateTrackingUI(activeJob.status || 'Pending');
-        alert(data.message || 'Request sent to nearby partners.');
+        setInlineMessage('booking-status', data.message || 'Request sent to nearby partners.', 'success');
         startStatusPolling();
     })
     .catch((err) => {
         document.getElementById('booking-modal')?.classList.add('hidden');
         if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
-        alert(err.message || 'Failed to send nearby request');
+        setInlineMessage('booking-status', err.message || 'Failed to send nearby request', 'error');
     });
 }
 
@@ -655,9 +702,10 @@ async function rejectPartnerRequest(jobId) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Failed to reject request');
+        setInlineMessage('partner-status-banner', data.message || 'Request rejected', 'info');
         loadPartnerDashboard();
     } catch (err) {
-        alert(err.message || 'Failed to reject request');
+        setInlineMessage('partner-status-banner', err.message || 'Failed to reject request', 'error');
     }
 }
 
@@ -670,9 +718,10 @@ async function cancelPartnerJob(jobId) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Failed to cancel job');
+        setInlineMessage('partner-status-banner', data.message || 'Job cancelled', 'info');
         loadPartnerDashboard();
     } catch (err) {
-        alert(err.message || 'Failed to cancel job');
+        setInlineMessage('partner-status-banner', err.message || 'Failed to cancel job', 'error');
     }
 }
 
@@ -716,7 +765,7 @@ function startStatusPolling() {
                     }
 
                     if (previousStatus === 'Pending' && activeJob.status === 'Rejected') {
-                        alert('One partner rejected the request. Looking for another nearby partner.');
+                        setInlineMessage('booking-status', 'One partner rejected the request. Looking for another nearby partner.', 'info');
                     }
 
                     if (activeJob.status === "Paid") {
@@ -730,7 +779,7 @@ function startStatusPolling() {
                 document.getElementById('booking-modal')?.classList.add('hidden');
                 if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
                 if (previousStatus === 'Pending') {
-                    alert('No nearby partner accepted the request. Please try again or change the filter.');
+                    setInlineMessage('booking-status', 'No nearby partner accepted the request. Please try again or change the filter.', 'error');
                 }
                 activeJob = null;
             }
@@ -817,7 +866,7 @@ function showFeature(name) {
     if (name === 'register') {
         const email = localStorage.getItem('userEmail');
         if (!email) {
-            alert("Please login first to register as a partner.");
+            showAppFeedback("Please login first to register as a partner.", 'error');
             openAuthModal();
             return;
         }
@@ -845,7 +894,7 @@ async function toggleTracking(role = 'user', forceOpen = null) {
     // Role enforcement
     const userRole = localStorage.getItem('userRole');
     if (userRole && userRole !== role) {
-        alert(`You are currently logged in as a ${userRole}. You cannot access ${role} features.`);
+        showAppFeedback(`You are currently logged in as a ${userRole}. You cannot access ${role} features.`, 'error');
         return;
     }
 
@@ -1021,10 +1070,10 @@ async function updateJobStatus(jobId, status) {
             throw new Error(data.error || "Status update failed");
         }
         if (data.mail && !data.mail.success) {
-            alert(`Status updated, but email sending failed: ${data.mail.error}`);
+            showAppFeedback(`Status updated, but email sending failed: ${data.mail.error}`, 'error');
         }
         loadPartnerDashboard();
-    } catch (err) { alert(err.message || "Status update failed"); }
+    } catch (err) { showAppFeedback(err.message || "Status update failed", 'error'); }
 }
 
 function openPartnerDirections(lat, lng) {
@@ -1032,7 +1081,7 @@ function openPartnerDirections(lat, lng) {
     const safeLng = Number(lng);
 
     if (!Number.isFinite(safeLat) || !Number.isFinite(safeLng)) {
-        alert("Customer location is not available yet.");
+        showAppFeedback("Customer location is not available yet.", 'error');
         return;
     }
 
@@ -1158,7 +1207,7 @@ function switchRole(mode) {
     if (mode === 'partner') {
         const workerId = localStorage.getItem('workerId');
         if (!workerId) {
-             alert("Please register as a partner first.");
+             showAppFeedback("Please register as a partner first.", 'error');
              return;
         }
         partnerUI?.classList.remove('hidden');
@@ -1170,7 +1219,7 @@ function switchRole(mode) {
     } else {
         const userRole = localStorage.getItem('userRole');
         if (userRole === 'partner') {
-            alert("You are registered as a Partner. Please use the Partner Desk.");
+            showAppFeedback("You are registered as a Partner. Please use the Partner Desk.", 'info');
             switchRole('partner');
             return;
         }
@@ -1246,12 +1295,12 @@ function filterWorkers() {
 
 // Auth flow
 function openAuthModal() {
+    setInlineMessage('auth-status', '');
     const modal = document.getElementById('auth-modal');
     if (modal) modal.classList.remove('hidden');
     else {
-        // Only alert and redirect if we are not already on the main page
         if (window.location.pathname !== '/') {
-            alert("Session expired. Please login from the main page.");
+            setInlineMessage('auth-status', 'Please login from the main page.', 'error');
             window.location.href = '/';
         }
     }
@@ -1260,7 +1309,11 @@ function openAuthModal() {
 async function requestOTP() {
     const authEmail = document.getElementById('auth-email');
     const email = authEmail ? authEmail.value.trim().toLowerCase() : '';
-    if (!email) return alert("Email required");
+    if (!email) {
+        setInlineMessage('auth-status', 'Email is required.', 'error');
+        return;
+    }
+    setInlineMessage('auth-status', 'Sending OTP...', 'info');
 
     try {
         const res = await fetch('/api/auth/send-otp', {
@@ -1270,13 +1323,18 @@ async function requestOTP() {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
+            setInlineMessage('auth-status', 'OTP sent successfully. Check your inbox.', 'success');
             document.getElementById('otp-request')?.classList.add('hidden');
             document.getElementById('otp-verify')?.classList.remove('hidden');
         } else {
-            alert(data.error || "Error sending OTP");
+            const rawError = data.error || "Error sending OTP";
+            const friendlyError = rawError.toLowerCase().includes('smtp')
+                ? 'Login is temporarily unavailable. Admin must configure email settings on the server.'
+                : rawError;
+            setInlineMessage('auth-status', friendlyError, 'error');
         }
     } catch (err) {
-        alert("Server error");
+        setInlineMessage('auth-status', 'Server error. Please try again.', 'error');
     }
 }
 
@@ -1285,6 +1343,11 @@ async function verifyOTP() {
     const authOtp = document.getElementById('auth-otp');
     const email = authEmail ? authEmail.value.trim().toLowerCase() : '';
     const otp = authOtp ? authOtp.value.trim() : '';
+    if (!email || !otp) {
+        setInlineMessage('auth-status', 'Enter email and OTP.', 'error');
+        return;
+    }
+    setInlineMessage('auth-status', 'Verifying OTP...', 'info');
 
     try {
         const res = await fetch('/api/auth/verify-otp', {
@@ -1314,10 +1377,10 @@ async function verifyOTP() {
                 document.getElementById('role-choice-modal')?.classList.remove('hidden');
             }
         } else {
-            alert("Invalid OTP");
+            setInlineMessage('auth-status', data.error || "Invalid OTP", 'error');
         }
     } catch (err) {
-        alert("Auth failed");
+        setInlineMessage('auth-status', 'Authentication failed. Please try again.', 'error');
     }
 }
 
@@ -1344,14 +1407,14 @@ document.getElementById('customer-form')?.addEventListener('submit', async (e) =
         });
         if (res.ok) {
             localStorage.setItem('userRole', 'customer');
-            alert("Account created successfully!");
+            showAppFeedback("Account created successfully!", 'success');
             window.location.href = '/customer';
         } else {
             const err = await res.json();
-            alert(err.error || "Failed to create profile");
+            showAppFeedback(err.error || "Failed to create profile", 'error');
         }
     } catch (err) {
-        alert("Server error");
+        showAppFeedback("Server error", 'error');
     }
 });
 
@@ -1367,7 +1430,7 @@ document.getElementById('worker-form')?.addEventListener('submit', async (e) => 
     submitBtn.innerText = "Locating you...";
 
     if (!navigator.geolocation) {
-        alert("Geolocation is not supported by your browser");
+        showAppFeedback("Geolocation is not supported by your browser", 'error');
         submitBtn.disabled = false;
         submitBtn.innerText = originalText;
         return;
@@ -1393,21 +1456,21 @@ document.getElementById('worker-form')?.addEventListener('submit', async (e) => 
                 if (result.worker?.id) {
                     localStorage.setItem('workerId', result.worker.id);
                 }
-                alert("Successfully registered as Partner at your current location!");
+                showAppFeedback("Successfully registered as Partner at your current location!", 'success');
                 localStorage.setItem('lastAppMode', 'partner');
                 window.location.href = '/partner';
             } else {
                 const errData = await res.json();
-                alert(errData.error || "Registration failed");
+                showAppFeedback(errData.error || "Registration failed", 'error');
             }
         } catch (err) {
-            alert("Registration failed");
+            showAppFeedback("Registration failed", 'error');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerText = originalText;
         }
     }, (err) => {
-        alert("Please enable location access to register as a partner.");
+        showAppFeedback("Please enable location access to register as a partner.", 'error');
         submitBtn.disabled = false;
         submitBtn.innerText = originalText;
     }, { enableHighAccuracy: true });
@@ -1738,7 +1801,7 @@ async function deleteAdminItem(type, id) {
     try {
         const res = await fetch(`/api/admin/delete-${type}/${id}`, { method: 'DELETE' });
         if (res.ok) { loadAdminStats(); showAdminTab(type === 'worker' ? 'partners' : 'users'); }
-    } catch (e) { alert("Action failed"); }
+    } catch (e) { showAppFeedback("Action failed", 'error'); }
 }
 
 // partnerOnline is now declared at the top of the file
