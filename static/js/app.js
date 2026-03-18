@@ -10,6 +10,7 @@ let workerInitialPos = null;
 let bookingState = null; // New variable
 let isTracking = false; // New variable
 let partnerOnline = true; // Global early declaration // New variable
+let partnerJobsCache = [];
 
 // Role enforcement logic
 const userRole = localStorage.getItem('userRole'); // New constant
@@ -487,11 +488,15 @@ function showFeature(name) {
         }
         document.getElementById('register-modal')?.classList.remove('hidden');
     } else if (name === 'explore') {
-        alert("Explore feature coming soon! You'll be able to find professionals based on categories.");
+        closeModal('partner-earnings-modal');
+        closeModal('partner-history-modal');
+        refocusMap();
     } else if (name === 'earnings') {
-        alert("Earnings dashboard is under maintenance. Please check back later.");
+        renderPartnerEarnings();
+        document.getElementById('partner-earnings-modal')?.classList.remove('hidden');
     } else if (name === 'history') {
-        alert("Job history is migrating to a new database. Coming soon!");
+        renderPartnerHistory();
+        document.getElementById('partner-history-modal')?.classList.remove('hidden');
     } else if (name === 'settings') {
         openProfile();
     }
@@ -553,6 +558,7 @@ async function loadPartnerDashboard() {
     try {
         const res = await fetch(`/api/jobs/worker/${workerId}`);
         const jobs = await res.json();
+        partnerJobsCache = jobs;
         
         const active = jobs.find(j => j.status !== 'Paid');
         const waitingView = document.getElementById('partner-waiting-view');
@@ -689,6 +695,51 @@ function openPartnerDirections(lat, lng) {
         '_blank',
         'noopener'
     );
+}
+
+function renderPartnerEarnings() {
+    const totalEl = document.getElementById('partner-earnings-total');
+    const paidJobsEl = document.getElementById('partner-paid-jobs');
+    const pendingJobsEl = document.getElementById('partner-pending-jobs');
+
+    const paidJobs = partnerJobsCache.filter((job) => job.status === 'Paid');
+    const pendingJobs = partnerJobsCache.filter((job) => job.status !== 'Paid');
+    const total = paidJobs.reduce((sum, job) => sum + parseFloat(job.price || 0), 0);
+
+    if (totalEl) totalEl.innerText = `₹${total.toFixed(2)}`;
+    if (paidJobsEl) paidJobsEl.innerText = `${paidJobs.length}`;
+    if (pendingJobsEl) pendingJobsEl.innerText = `${pendingJobs.length}`;
+}
+
+function renderPartnerHistory() {
+    const list = document.getElementById('partner-history-list');
+    const empty = document.getElementById('partner-history-empty');
+    if (!list || !empty) return;
+
+    if (partnerJobsCache.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+
+    empty.classList.add('hidden');
+    list.innerHTML = partnerJobsCache.map((job) => `
+        <div class="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+            <div class="flex items-start justify-between gap-3 mb-2">
+                <div>
+                    <p class="font-black text-slate-800">${job.customer_name || job.customer_email?.split('@')[0] || 'Customer'}</p>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${job.skill}</p>
+                </div>
+                <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${job.status === 'Paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}">
+                    ${job.status}
+                </span>
+            </div>
+            <div class="flex items-center justify-between text-sm">
+                <span class="text-slate-500">${new Date(job.created_at).toLocaleString()}</span>
+                <span class="font-black text-slate-800">₹${parseFloat(job.price || 0).toFixed(2)}</span>
+            </div>
+        </div>
+    `).join('');
 }
 
 function initSwipeButton(jobId, currentStatus) {
@@ -1173,6 +1224,7 @@ async function openProfile(targetEmail = null) {
                 prompt.innerText = "Register as Partner";
                 prompt.onclick = () => { closeModal('profile-modal'); window.location.href='/'; /* Should trigger register modal logic maybe? Or just go to landing */ };
                 prompt.classList.remove('hidden');
+                prompt.className = "w-full mt-4 py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition";
             } else if (prompt) {
                 prompt.classList.add('hidden');
             }
@@ -1322,7 +1374,7 @@ async function deleteAdminItem(type, id) {
 // partnerOnline is now declared at the top of the file
 function togglePartnerOnlineStatus() {
     const btn = document.getElementById('partner-status-toggle');
-    const dot = document.querySelector('#partner-mode-ui .bg-green-500') || document.querySelector('#partner-mode-ui .bg-slate-300'); // Safe fallback
+    const dot = document.getElementById('partner-status-dot');
     const text = document.getElementById('partner-status-text');
 
     if (!btn || !text || !dot) return;

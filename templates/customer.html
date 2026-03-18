@@ -168,7 +168,7 @@
             <input type="text" id="skillSearch" placeholder="Search for Plumber, Electrician..."
                 class="bg-transparent border-none outline-none w-full py-2 text-slate-700 font-medium text-sm"
                 oninput="filterWorkers()">
-            <button class="bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-widest">Filter</button>
+            <button onclick="filterWorkers()" class="bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-widest">Filter</button>
         </div>
 
         <!-- Filter Chips -->
@@ -219,10 +219,14 @@
     <!-- Tracking Overlay -->
     <div id="tracking-panel" class="fixed inset-y-0 right-0 w-full md:w-96 glass-card z-[200] transform translate-x-full transition-transform duration-500 p-8 hidden flex flex-col">
         <div class="flex justify-between items-center mb-8">
-            <h2 class="text-2xl font-black text-slate-800">My Bookings</h2>
+            <h2 id="tracking-panel-title" class="text-2xl font-black text-slate-800">My Bookings</h2>
             <button onclick="toggleTracking('user')" class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"><i class="fas fa-times"></i></button>
         </div>
         <div id="active-job-details" class="flex-1 overflow-y-auto no-scrollbar"></div>
+        <div id="no-active-job" class="hidden flex-1 overflow-y-auto no-scrollbar">
+            <div id="empty-history" class="hidden text-center py-10 text-slate-400 font-bold">No booking history yet.</div>
+            <div id="job-history-list" class="space-y-3"></div>
+        </div>
     </div>
 
     <!-- Booking Modal -->
