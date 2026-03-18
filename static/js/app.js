@@ -13,6 +13,8 @@ let partnerOnline = true; // Global early declaration // New variable
 let partnerJobsCache = [];
 let deferredInstallPrompt = null;
 let workersCache = [];
+const terminalJobStatuses = ['Paid', 'Cancelled', 'Rejected', 'Expired'];
+const actionableCustomerStatuses = ['Accepted', 'On the Way', 'Reached', 'Completed', 'Pending'];
 
 // Role enforcement logic
 const userRole = localStorage.getItem('userRole'); // New constant
@@ -218,6 +220,41 @@ function renderMarkers(workers) {
         const group = L.featureGroup(markers);
         map.fitBounds(group.getBounds(), { padding: [60, 60] });
     }
+}
+
+function getFilteredWorkersList() {
+    const normalizedFilter = (currentFilter || 'All').trim().toLowerCase();
+    if (normalizedFilter === 'all') return workersCache;
+    return workersCache.filter((worker) => {
+        const skill = (worker.skill || '').toLowerCase();
+        const name = (worker.name || '').toLowerCase();
+        const email = (worker.email || '').toLowerCase();
+        return skill.includes(normalizedFilter) || name.includes(normalizedFilter) || email.includes(normalizedFilter);
+    });
+}
+
+function selectCustomerActiveJob(jobs) {
+    if (!Array.isArray(jobs) || jobs.length === 0) return null;
+    const active = jobs.filter((job) => !terminalJobStatuses.includes(job.status));
+    if (active.length === 0) return null;
+    const priority = { 'Accepted': 0, 'On the Way': 1, 'Reached': 2, 'Completed': 3, 'Pending': 4 };
+    return active.sort((a, b) => {
+        const statusDiff = (priority[a.status] ?? 99) - (priority[b.status] ?? 99);
+        if (statusDiff !== 0) return statusDiff;
+        return (b.created_at || '').localeCompare(a.created_at || '');
+    })[0];
+}
+
+function selectPartnerDashboardJob(jobs) {
+    if (!Array.isArray(jobs) || jobs.length === 0) return null;
+    const active = jobs.filter((job) => ['Accepted', 'On the Way', 'Reached', 'Completed', 'Pending'].includes(job.status));
+    if (active.length === 0) return null;
+    const priority = { 'Accepted': 0, 'On the Way': 1, 'Reached': 2, 'Completed': 3, 'Pending': 4 };
+    return active.sort((a, b) => {
+        const statusDiff = (priority[a.status] ?? 99) - (priority[b.status] ?? 99);
+        if (statusDiff !== 0) return statusDiff;
+        return (b.created_at || '').localeCompare(a.created_at || '');
+    })[0];
 }
 
 async function viewWorkerProfile(id, email) {
@@ -536,18 +573,107 @@ function hireWorker(id, name, skill, price, photo_url) {
     });
 }
 
+function requestNearbyPartners() {
+    const email = localStorage.getItem('userEmail');
+    if (!email) {
+        openAuthModal();
+        return;
+    }
+
+    const filteredWorkers = getFilteredWorkersList();
+    if (filteredWorkers.length === 0) {
+        alert("No nearby partners found for this filter.");
+        return;
+    }
+
+    const primarySkill = currentFilter && currentFilter !== 'All'
+        ? currentFilter
+        : (filteredWorkers[0]?.skill || 'Service');
+
+    document.getElementById('booking-name').innerText = `${filteredWorkers.length} nearby partners`;
+    document.getElementById('booking-skill').innerText = primarySkill;
+    document.getElementById('booking-price').innerText = `Broadcast request in progress`;
+    document.getElementById('booking-photo').src = filteredWorkers[0]?.photo_url || 'https://via.placeholder.com/150';
+    document.getElementById('booking-modal')?.classList.remove('hidden');
+    if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'flex';
+
+    fetch('/api/jobs/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            customer_email: email,
+            skill: primarySkill,
+            worker_ids: filteredWorkers.map((worker) => worker.id),
+            price: filteredWorkers[0]?.price || 0,
+            customer_location: {
+                lat: userLocation.lat,
+                lng: userLocation.lng
+            }
+        })
+    })
+    .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.error || data.message || 'Failed to send request');
+        }
+        return data;
+    })
+    .then((data) => {
+        activeJob = data.job;
+        renderCustomerActiveJob(activeJob);
+        updateTrackingUI(activeJob.status || 'Pending');
+        alert(data.message || 'Request sent to nearby partners.');
+        startStatusPolling();
+    })
+    .catch((err) => {
+        document.getElementById('booking-modal')?.classList.add('hidden');
+        if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
+        alert(err.message || 'Failed to send nearby request');
+    });
+}
+
 function cancelBooking() {
     if (activeJob) {
         fetch('/api/jobs/cancel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_id: activeJob.id })
+            body: JSON.stringify({ job_id: activeJob.id, cancelled_by: 'customer' })
         });
     }
     activeJob = null;
     document.getElementById('booking-modal')?.classList.add('hidden');
     if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
     if (statusPollInterval) clearInterval(statusPollInterval);
+}
+
+async function rejectPartnerRequest(jobId) {
+    try {
+        const res = await fetch('/api/jobs/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobId })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to reject request');
+        loadPartnerDashboard();
+    } catch (err) {
+        alert(err.message || 'Failed to reject request');
+    }
+}
+
+async function cancelPartnerJob(jobId) {
+    try {
+        const res = await fetch('/api/jobs/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobId, cancelled_by: 'partner' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to cancel job');
+        loadPartnerDashboard();
+    } catch (err) {
+        alert(err.message || 'Failed to cancel job');
+    }
 }
 
 let statusPollInterval = null;
@@ -563,7 +689,8 @@ function startStatusPolling() {
         try {
             const res = await fetch(`/api/jobs/customer/${localStorage.getItem('userEmail')}`);
             const jobs = await res.json();
-            const current = jobs.find(j => j.id === activeJob.id);
+            const previousStatus = activeJob.status;
+            const current = jobs.find(j => j.id === activeJob.id) || selectCustomerActiveJob(jobs);
             
             if (current) {
                 // Update worker location if we can find them
@@ -577,8 +704,7 @@ function startStatusPolling() {
                         }
                     });
 
-                if (current.status !== activeJob.status) {
-                    activeJob.status = current.status;
+                if (current.status !== previousStatus || current.id !== activeJob.id) {
                     activeJob = current;
                     renderCustomerActiveJob(activeJob);
                     updateTrackingUI(activeJob.status);
@@ -589,12 +715,24 @@ function startStatusPolling() {
                         if (activeJob.status === 'Accepted') toggleTracking('user', true);
                     }
 
+                    if (previousStatus === 'Pending' && activeJob.status === 'Rejected') {
+                        alert('One partner rejected the request. Looking for another nearby partner.');
+                    }
+
                     if (activeJob.status === "Paid") {
                         clearInterval(statusPollInterval);
                         activeJob = null;
                         location.reload(); // Refresh to clean state
                     }
                 }
+            } else {
+                clearInterval(statusPollInterval);
+                document.getElementById('booking-modal')?.classList.add('hidden');
+                if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
+                if (previousStatus === 'Pending') {
+                    alert('No nearby partner accepted the request. Please try again or change the filter.');
+                }
+                activeJob = null;
             }
         } catch (err) {
             console.log("Polling error");
@@ -757,7 +895,7 @@ async function loadPartnerDashboard() {
         const jobs = await res.json();
         partnerJobsCache = jobs;
         
-        const active = jobs.find(j => !['Paid', 'Cancelled'].includes(j.status));
+        const active = selectPartnerDashboardJob(jobs);
         const waitingView = document.getElementById('partner-waiting-view');
         const activeView = document.getElementById('partner-active-job-details');
 
@@ -801,6 +939,15 @@ async function loadPartnerDashboard() {
                                         <p class="text-indigo-200 font-black text-[11px] uppercase mt-1 tracking-wider">${active.status}</p>
                                     </div>
                                     <div class="flex items-center gap-2">
+                                        ${active.status === 'Pending' ? `
+                                        <button onclick="rejectPartnerRequest('${active.id}')" class="w-10 h-10 bg-rose-500/80 rounded-xl flex items-center justify-center text-white backdrop-blur-md">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                        ` : `
+                                        <button onclick="cancelPartnerJob('${active.id}')" class="w-10 h-10 bg-rose-500/80 rounded-xl flex items-center justify-center text-white backdrop-blur-md">
+                                            <i class="fas fa-ban"></i>
+                                        </button>
+                                        `}
                                         <button onclick="openPartnerDirections(${active.customer_location?.lat ?? 'null'}, ${active.customer_location?.lng ?? 'null'})" class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white backdrop-blur-md">
                                             <i class="fas fa-route"></i>
                                         </button>
@@ -1065,7 +1212,12 @@ async function loadJobHistory() {
                             <p class="font-bold text-slate-800">${job.skill}</p>
                             <p class="text-[10px] text-slate-500 uppercase font-black">${new Date(job.created_at).toLocaleDateString()}</p>
                         </div>
-                        <span class="px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${job.status === 'Completed' ? 'bg-green-100 text-green-600' : 'bg-indigo-100 text-indigo-600'
+                        <span class="px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${
+                            job.status === 'Paid' ? 'bg-green-100 text-green-600' :
+                            job.status === 'Cancelled' ? 'bg-rose-100 text-rose-600' :
+                            job.status === 'Rejected' ? 'bg-slate-200 text-slate-700' :
+                            job.status === 'Expired' ? 'bg-slate-100 text-slate-500' :
+                            'bg-indigo-100 text-indigo-600'
                 }">${job.status}</span>
                     </div>
                     <div class="flex justify-between items-center text-sm">
@@ -1334,7 +1486,7 @@ window.addEventListener('load', async () => {
             fetch(`/api/jobs/customer/${email}`)
                 .then(res => res.json())
                 .then(jobs => {
-                    const active = jobs.find(j => !['Paid', 'Cancelled'].includes(j.status));
+                    const active = selectCustomerActiveJob(jobs);
                     if (active) {
                         activeJob = active;
                         renderCustomerActiveJob(activeJob);
@@ -1445,7 +1597,7 @@ async function openProfile(targetEmail = null) {
 }
 
 function quickRequest(id) {
-    alert("Priority request sent! The professional has been notified of your urgent need.");
+    requestNearbyPartners();
 }
 
 // === NEW ADMIN & PARTNER ENHANCEMENTS ===
@@ -1488,7 +1640,7 @@ async function showAdminTab(tab) {
 
     // Clear previous state
     head.innerHTML = '';
-    body.innerHTML = '<tr><td colspan="5" class="p-20 text-center"><i class="fas fa-circle-notch animate-spin text-indigo-600 text-3xl"></i></td></tr>';
+    body.innerHTML = '<tr><td colspan="6" class="p-20 text-center"><i class="fas fa-circle-notch animate-spin text-indigo-600 text-3xl"></i></td></tr>';
 
     try {
         const res = await fetch(`/api/admin/${tab}`);
@@ -1548,6 +1700,7 @@ async function showAdminTab(tab) {
                 <th class="px-6 py-4 font-bold text-slate-400 uppercase text-[10px]">Work Reference</th>
                 <th class="px-6 py-4 font-bold text-slate-400 uppercase text-[10px]">Customer</th>
                 <th class="px-6 py-4 font-bold text-slate-400 uppercase text-[10px]">Assigned Partner</th>
+                <th class="px-6 py-4 font-bold text-slate-400 uppercase text-[10px]">Dispatch</th>
                 <th class="px-6 py-4 font-bold text-slate-400 uppercase text-[10px]">Payout</th>
                 <th class="px-6 py-4 font-bold text-slate-400 uppercase text-[10px]">Process Status</th>
             </tr>`;
@@ -1556,9 +1709,19 @@ async function showAdminTab(tab) {
                     <td class="px-6 py-4"><div><p class="font-black text-slate-800">${j.skill}</p><p class="text-[10px] text-slate-400 font-mono">#${j.id.split('-')[0]}</p></div></td>
                     <td class="px-6 py-4 text-slate-500 text-[11px] font-bold">${j.customer_email}</td>
                     <td class="px-6 py-4 text-slate-500 text-[11px] font-bold">${j.worker_email || '<span class="text-amber-500 italic">Waiting...</span>'}</td>
+                    <td class="px-6 py-4">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${j.request_mode || 'direct'}</p>
+                        <p class="text-[11px] font-bold text-slate-700">${j.cancelled_by ? `Cancelled by ${j.cancelled_by}` : (j.rejected_by ? `Rejected by ${j.rejected_by}` : 'Live flow')}</p>
+                    </td>
                     <td class="px-6 py-4 font-black text-indigo-600">₹${j.price}</td>
                     <td class="px-6 py-4">
-                        <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${j.status === 'Paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600 border border-amber-200'}">
+                        <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                            j.status === 'Paid' ? 'bg-emerald-100 text-emerald-600' :
+                            j.status === 'Cancelled' ? 'bg-rose-100 text-rose-600 border border-rose-200' :
+                            j.status === 'Rejected' ? 'bg-slate-200 text-slate-700 border border-slate-300' :
+                            j.status === 'Expired' ? 'bg-slate-100 text-slate-500 border border-slate-200' :
+                            'bg-amber-100 text-amber-600 border border-amber-200'
+                        }">
                             ${j.status}
                         </span>
                     </td>
@@ -1567,7 +1730,7 @@ async function showAdminTab(tab) {
         }
     } catch (e) { 
         console.error("Tab data error", e); 
-        body.innerHTML = '<tr><td colspan="5" class="p-20 text-center text-rose-500 font-bold">Failed to load system data. Please try again.</td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="p-20 text-center text-rose-500 font-bold">Failed to load system data. Please try again.</td></tr>';
     }
 }
 async function deleteAdminItem(type, id) {
@@ -1601,6 +1764,15 @@ function togglePartnerOnlineStatus() {
         text.innerText = "Offline (Resting)";
         text.className = "text-xs font-bold text-slate-400 uppercase";
     }
+
+    fetch('/api/workers/availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            email: localStorage.getItem('userEmail'),
+            availability: partnerOnline ? 'Available' : 'Offline'
+        })
+    }).catch(() => console.log('Availability update failed'));
 }
 
 // MANDATORY HIGH-ACCURACY GPS TRACKING FOR PARTNERS
@@ -1616,6 +1788,7 @@ setInterval(() => {
                     email: localStorage.getItem('userEmail'),
                     lat: latitude,
                     lng: longitude,
+                    availability: partnerOnline ? 'Available' : 'Offline',
                     update_only: 'true'
                 })
             });

@@ -10,7 +10,9 @@ worker_bp = Blueprint('worker', __name__)
 @worker_bp.route('/', methods=['GET'])
 def get_workers():
     workers_col = db_instance.get_collection('workers')
-    workers = list(workers_col.find())
+    include_all = request.args.get('include_all') == '1'
+    query = {} if include_all else {"availability": {"$ne": "Offline"}}
+    workers = list(workers_col.find(query))
     # Clean up _id for JSON serializability if using Mongo
     for w in workers:
         if '_id' in w: w['_id'] = str(w['_id'])
@@ -52,11 +54,14 @@ def register_worker():
     existing_worker = workers_col.find_one({"email": email})
     if existing_worker:
         # Update only if it's already a worker
+        availability = data.get('availability', existing_worker.get('availability', 'Available'))
         workers_col.update_one(
             {"email": email},
             {"$set": {
                 "lat": float(data.get('lat', existing_worker.get('lat'))),
                 "lng": float(data.get('lng', existing_worker.get('lng'))),
+                "availability": availability,
+                "status": 'Available' if availability != 'Offline' else 'Offline',
                 "last_active": datetime.datetime.utcnow().isoformat()
             }}
         )
@@ -103,3 +108,27 @@ def register_worker():
     db_instance.get_collection('users').update_one({"email": email}, {"$set": {"role": "partner"}})
         
     return jsonify({"message": "Worker registered successfully", "worker": new_worker})
+
+
+@worker_bp.route('/availability', methods=['POST'])
+def update_worker_availability():
+    data = request.get_json(silent=True) or {}
+    email = data.get('email')
+    availability = data.get('availability', 'Available')
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+
+    workers_col = db_instance.get_collection('workers')
+    worker = workers_col.find_one({"email": email})
+    if not worker:
+        return jsonify({"error": "Worker not found"}), 404
+
+    workers_col.update_one(
+        {"email": email},
+        {"$set": {
+            "availability": availability,
+            "status": 'Available' if availability != 'Offline' else 'Offline',
+            "last_active": datetime.datetime.utcnow().isoformat()
+        }}
+    )
+    return jsonify({"message": "Availability updated", "availability": availability})
