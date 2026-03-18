@@ -907,10 +907,13 @@ function normalizeAppRole(role) {
     return role;
 }
 
-async function toggleTracking(role = 'user', forceOpen = null) {
+async function toggleTracking(role = 'customer', forceOpen = null) {
     // Role enforcement
     const userRole = normalizeAppRole(localStorage.getItem('userRole'));
     const requestedRole = normalizeAppRole(role);
+    if (userRole === 'customer' && requestedRole === 'customer') {
+        // Customer and user are the same app section.
+    }
     if (userRole && userRole !== requestedRole) {
         showAppFeedback(`You are currently logged in as a ${userRole}. You cannot access ${requestedRole} features.`, 'error');
         return;
@@ -1411,7 +1414,7 @@ async function verifyOTP() {
 
 function selectInitialRole(role) {
     document.getElementById('role-choice-modal')?.classList.add('hidden');
-    if (role === 'user') {
+    if (normalizeAppRole(role) === 'customer') {
         document.getElementById('customer-register-modal')?.classList.remove('hidden');
     } else {
         document.getElementById('register-modal')?.classList.remove('hidden');
