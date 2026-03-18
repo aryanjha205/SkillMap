@@ -67,7 +67,7 @@ function setOtpPreview(otp = '') {
 }
 
 function showAppFeedback(message, tone = 'info') {
-    const targets = ['partner-status-banner', 'booking-status', 'auth-status'];
+    const targets = ['admin-status-banner', 'partner-status-banner', 'booking-status', 'auth-status'];
     const availableTarget = targets.find((id) => document.getElementById(id));
     if (availableTarget) {
         setInlineMessage(availableTarget, message, tone);
@@ -1825,10 +1825,12 @@ async function showAdminTab(tab) {
     }
 }
 async function deleteAdminItem(type, id) {
-    if (!confirm(`Delete this ${type}?`)) return;
     try {
         const res = await fetch(`/api/admin/delete-${type}/${id}`, { method: 'DELETE' });
-        if (res.ok) { loadAdminStats(); showAdminTab(type === 'worker' ? 'partners' : 'users'); }
+        if (!res.ok) throw new Error('Delete failed');
+        showAppFeedback(`${type === 'worker' ? 'Partner' : 'User'} deleted successfully.`, 'success');
+        loadAdminStats();
+        showAdminTab(type === 'worker' ? 'partners' : 'users');
     } catch (e) { showAppFeedback("Action failed", 'error'); }
 }
 
