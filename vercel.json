@@ -8,7 +8,25 @@
   ],
   "headers": [
     {
-      "source": "/static/(.*)",
+      "source": "/static/js/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/static/uploads/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/static/manifest/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

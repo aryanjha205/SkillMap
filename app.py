@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
 from routes.auth_routes import auth_bp
@@ -22,6 +22,22 @@ class CustomJSONProvider(Flask.json_provider_class):
         return json.dumps(obj, default=str, **kwargs)
 
 app.json = CustomJSONProvider(app)
+
+
+@app.context_processor
+def inject_asset_helpers():
+    def asset_url(filename):
+        file_path = os.path.join(app.static_folder, filename)
+        version = None
+        try:
+            version = int(os.path.getmtime(file_path))
+        except OSError:
+            version = None
+        if version is None:
+            return url_for('static', filename=filename)
+        return url_for('static', filename=filename, v=version)
+
+    return {"asset_url": asset_url}
 
 # Helper routes for PWA
 @app.route('/manifest.json')
@@ -64,6 +80,19 @@ def health():
         "status": "healthy", 
         "db": "connected" if db_instance.db is not None else "unavailable",
         "db_error": db_instance.last_error
+    })
+
+
+@app.route('/health/email')
+def email_health():
+    smtp_username = os.getenv('SMTP_USERNAME') or os.getenv('MAIL_DEFAULT_SENDER')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    return jsonify({
+        "configured": bool(smtp_username and smtp_password),
+        "smtp_server": os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
+        "smtp_port": os.getenv('SMTP_PORT', '587'),
+        "sender_present": bool(smtp_username),
+        "password_present": bool(smtp_password)
     })
 
 if __name__ == '__main__':

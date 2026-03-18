@@ -308,7 +308,7 @@
     <!-- Sound -->
     <audio id="ring-sound" loop src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
 
-    <script src="/static/js/app.js"></script>
+    <script src="{{ asset_url('js/app.js') }}"></script>
     <script>
         window.addEventListener('load', () => {
              if (!localStorage.getItem('userEmail')) {
