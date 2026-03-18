@@ -17,6 +17,10 @@ def send_otp_email(receiver_email, otp):
     sender_email = os.getenv('SMTP_USERNAME')
     password = os.getenv('SMTP_PASSWORD')
 
+    if not sender_email or not password:
+        print("Email error: SMTP_USERNAME or SMTP_PASSWORD is missing")
+        return False
+
     message = MIMEMultipart()
     message["From"] = f"SkillMap <{sender_email}>"
     message["To"] = receiver_email

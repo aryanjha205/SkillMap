@@ -7,6 +7,48 @@ import datetime
 auth_bp = Blueprint('auth', __name__)
 otp_store = {} # Temporary in-memory store for OTPs. In prod, use Redis or DB.
 
+def save_otp(email, otp):
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+    try:
+        otp_col = db_instance.get_collection('otp_codes')
+        otp_col.update_one(
+            {"email": email},
+            {"$set": {"otp": otp, "expires_at": expires_at}},
+            upsert=True
+        )
+        return True
+    except Exception:
+        otp_store[email] = {"otp": otp, "expires_at": expires_at}
+        return False
+
+def read_otp(email):
+    now = datetime.datetime.utcnow()
+    try:
+        otp_col = db_instance.get_collection('otp_codes')
+        record = otp_col.find_one({"email": email})
+        if not record:
+            return None
+        expires_at = record.get("expires_at")
+        if expires_at and expires_at < now:
+            otp_col.delete_one({"email": email})
+            return None
+        return record.get("otp")
+    except Exception:
+        record = otp_store.get(email)
+        if not record:
+            return None
+        if record.get("expires_at") and record["expires_at"] < now:
+            otp_store.pop(email, None)
+            return None
+        return record.get("otp")
+
+def clear_otp(email):
+    try:
+        otp_col = db_instance.get_collection('otp_codes')
+        otp_col.delete_one({"email": email})
+    except Exception:
+        otp_store.pop(email, None)
+
 @auth_bp.route('/send-otp', methods=['POST'])
 def send_otp():
     data = request.json
@@ -16,7 +58,7 @@ def send_otp():
     
     otp = generate_otp()
     if send_otp_email(email, otp):
-        otp_store[email] = otp
+        save_otp(email, otp)
         return jsonify({"message": "OTP sent successfully"})
     return jsonify({"error": "Failed to send OTP"}), 500
 
@@ -26,7 +68,7 @@ def verify_otp():
     email = data.get('email')
     otp = data.get('otp')
     
-    if otp_store.get(email) == otp:
+    if read_otp(email) == otp:
         token = create_token(email)
         users_col = db_instance.get_collection('users')
         workers_col = db_instance.get_collection('workers')
@@ -61,7 +103,7 @@ def verify_otp():
             users_col.insert_one({"id": user_id, "email": email, "created_at": datetime.datetime.utcnow().isoformat()})
             user_data = {"id": user_id, "email": email}
 
-        del otp_store[email]
+        clear_otp(email)
         return jsonify({
             "token": token, 
             "email": email, 
