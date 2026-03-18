@@ -902,21 +902,27 @@ function closeModal(id) {
     document.getElementById(id)?.classList.add('hidden');
 }
 
+function normalizeAppRole(role) {
+    if (role === 'user') return 'customer';
+    return role;
+}
+
 async function toggleTracking(role = 'user', forceOpen = null) {
     // Role enforcement
-    const userRole = localStorage.getItem('userRole');
-    if (userRole && userRole !== role) {
-        showAppFeedback(`You are currently logged in as a ${userRole}. You cannot access ${role} features.`, 'error');
+    const userRole = normalizeAppRole(localStorage.getItem('userRole'));
+    const requestedRole = normalizeAppRole(role);
+    if (userRole && userRole !== requestedRole) {
+        showAppFeedback(`You are currently logged in as a ${userRole}. You cannot access ${requestedRole} features.`, 'error');
         return;
     }
 
-    const panelId = role === 'user' ? 'tracking-panel' : 'partner-panel';
+    const panelId = requestedRole === 'customer' ? 'tracking-panel' : 'partner-panel';
     const panel = document.getElementById(panelId);
     if (!panel) return; // Safety check
 
     // Close other panel if open
-    const otherRole = role === 'user' ? 'partner' : 'user';
-    const otherPanel = document.getElementById(otherRole === 'user' ? 'tracking-panel' : 'partner-panel');
+    const otherRole = requestedRole === 'customer' ? 'partner' : 'customer';
+    const otherPanel = document.getElementById(otherRole === 'customer' ? 'tracking-panel' : 'partner-panel');
     if (otherPanel && !otherPanel.classList.contains('hidden')) {
         otherPanel.classList.add('translate-x-full');
         setTimeout(() => otherPanel.classList.add('hidden'), 500);
@@ -928,7 +934,7 @@ async function toggleTracking(role = 'user', forceOpen = null) {
         panel.classList.remove('hidden');
         setTimeout(() => panel.classList.remove('translate-x-full'), 10);
 
-        if (role === 'user') {
+        if (requestedRole === 'customer') {
             const titleEl = document.getElementById('tracking-panel-title');
             if (activeJob) {
                 if (titleEl) titleEl.innerText = "Live Status";
