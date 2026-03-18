@@ -51,6 +51,7 @@
                 <input type="email" id="auth-email" class="w-full bg-slate-100 rounded-2xl px-6 py-4 outline-none focus:ring-2 ring-indigo-600 text-center text-lg mb-6" placeholder="name@email.com">
                 <button onclick="requestOTP()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold shadow-xl">Send Code</button>
             </div>
+            <p id="auth-otp-preview" class="hidden mt-4 rounded-2xl bg-slate-900 px-4 py-4 text-white text-lg font-black tracking-[0.35em]"></p>
             <div id="otp-verify" class="hidden">
                 <input type="text" maxlength="6" id="auth-otp" class="w-full bg-slate-100 rounded-2xl px-6 py-4 outline-none focus:ring-2 ring-indigo-600 text-center text-2xl tracking-[0.5em] font-bold mb-6" placeholder="000000">
                 <button onclick="verifyOTP()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl">Verify & Login</button>

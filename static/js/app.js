@@ -54,6 +54,18 @@ function clearInlineMessages() {
     ['auth-status', 'booking-status', 'partner-status-banner'].forEach((id) => setInlineMessage(id, ''));
 }
 
+function setOtpPreview(otp = '') {
+    const preview = document.getElementById('auth-otp-preview');
+    if (!preview) return;
+    if (!otp) {
+        preview.textContent = '';
+        preview.classList.add('hidden');
+        return;
+    }
+    preview.textContent = otp;
+    preview.classList.remove('hidden');
+}
+
 function showAppFeedback(message, tone = 'info') {
     const targets = ['partner-status-banner', 'booking-status', 'auth-status'];
     const availableTarget = targets.find((id) => document.getElementById(id));
@@ -1296,6 +1308,7 @@ function filterWorkers() {
 // Auth flow
 function openAuthModal() {
     setInlineMessage('auth-status', '');
+    setOtpPreview('');
     const modal = document.getElementById('auth-modal');
     if (modal) modal.classList.remove('hidden');
     else {
@@ -1313,6 +1326,7 @@ async function requestOTP() {
         setInlineMessage('auth-status', 'Email is required.', 'error');
         return;
     }
+    setOtpPreview('');
     setInlineMessage('auth-status', 'Sending OTP...', 'info');
 
     try {
@@ -1323,7 +1337,12 @@ async function requestOTP() {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-            setInlineMessage('auth-status', 'OTP sent successfully. Check your inbox.', 'success');
+            if (data.delivery === 'fallback' && data.otp_preview) {
+                setInlineMessage('auth-status', data.message || 'Use the OTP shown below to continue.', 'info');
+                setOtpPreview(data.otp_preview);
+            } else {
+                setInlineMessage('auth-status', 'OTP sent successfully. Check your inbox.', 'success');
+            }
             document.getElementById('otp-request')?.classList.add('hidden');
             document.getElementById('otp-verify')?.classList.remove('hidden');
         } else {
