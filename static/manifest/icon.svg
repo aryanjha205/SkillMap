@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="skillmapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#skillmapGradient)" />
+  <path d="M256 88c-70.7 0-128 54.1-128 120.8 0 93.8 112.2 207.2 117 212.1a16 16 0 0 0 22 0c4.8-4.9 117-118.3 117-212.1C384 142.1 326.7 88 256 88Zm0 168a48 48 0 1 1 0-96 48 48 0 0 1 0 96Z" fill="#fff"/>
+  <path d="M336 368c-19.9 24.3-42.2 47-58.5 62.9a32 32 0 0 1-43 0c-16.3-15.9-38.6-38.6-58.5-62.9h160Z" fill="#C7D2FE"/>
+  <path d="M212 214h88v24h-28v62h-32v-62h-28v-24Z" fill="#4F46E5"/>
+</svg>

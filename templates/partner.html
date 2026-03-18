@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4F46E5">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/static/manifest/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/manifest/icon.svg">
+    <title>SkillMap | Partner Desk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --glass: rgba(255, 255, 255, 0.9);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #f8fafc;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+        }
+
+        .floating-top {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            z-index: 100;
+        }
+
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 20px;
+            left: 15px;
+            right: 15px;
+            height: 70px;
+            background: #fff;
+            border-radius: 35px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            padding: 0 10px;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #94a3b8;
+            font-size: 20px;
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+            background: #eef2ff;
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            justify-content: center;
+        }
+
+        .center-btn {
+            width: 55px;
+            height: 55px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            margin-top: -35px;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+        }
+
+        .swipe-container {
+            position: fixed;
+            bottom: 100px;
+            left: 15px;
+            right: 15px;
+            background: #f1f5f9;
+            height: 64px;
+            border-radius: 32px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            padding: 0 4px;
+            cursor: pointer;
+            user-select: none;
+            z-index: 100;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+        }
+
+        .swipe-handle {
+            position: absolute;
+            left: 4px;
+            width: 56px;
+            height: 56px;
+            background: var(--primary);
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+            transition: transform 0.1s ease-out;
+            z-index: 5;
+        }
+
+        .swipe-text {
+            width: 100%;
+            text-align: center;
+            font-weight: 800;
+            font-size: 14px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            pointer-events: none;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* Stats Chips */
+        .stats-chip {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+
+<body class="overflow-hidden bg-slate-50">
+
+    <!-- Top Floating Section -->
+    <div class="floating-top space-y-3">
+        <!-- Logo & Status -->
+        <div class="glass-card px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg">
+                    <i class="fas fa-tools text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-none">Partner Desk</h1>
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                        <span id="partner-status-text" class="text-[9px] text-green-600 font-bold uppercase tracking-widest">Online</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="logout()" class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+
+        <!-- Earnings & Toggle Chips -->
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+            <div class="stats-chip">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Earning</p>
+                <p id="partner-earnings" class="text-sm font-black text-slate-800">₹0</p>
+            </div>
+            <div class="stats-chip">
+                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Rate</p>
+                <p class="text-sm font-black text-indigo-600">100%</p>
+            </div>
+            <button id="partner-status-toggle" onclick="togglePartnerOnlineStatus()" class="stats-chip bg-slate-900 text-white border-transparent">
+                <i class="fas fa-power-off text-xs"></i>
+                <span class="text-[10px] font-black uppercase tracking-widest">Go Offline</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- Active Job Activity Area -->
+    <div id="partner-active-job-details" class="hidden">
+         <!-- Data injected by app.js (Swipe button will be here) -->
+    </div>
+
+    <div id="partner-waiting-view" class="fixed bottom-[110px] left-[15px] right-[15px] z-[50]">
+        <div class="glass-card p-4 flex items-center justify-center gap-3">
+             <i class="fas fa-radar text-indigo-600 animate-spin"></i>
+             <p class="text-sm font-bold text-slate-500">Waiting for requests...</p>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation (Mirrors Customer GUI) -->
+    <div class="bottom-nav">
+        <button onclick="window.location.reload()" class="nav-item active">
+            <i class="fas fa-desktop"></i>
+        </button>
+        <button onclick="showFeature('earnings')" class="nav-item">
+            <i class="fas fa-wallet"></i>
+        </button>
+        <div class="center-btn" onclick="openProfile()">
+            <i class="fas fa-user-tie"></i>
+        </div>
+        <button onclick="showFeature('history')" class="nav-item">
+            <i class="fas fa-history"></i>
+        </button>
+        <button onclick="openProfile()" class="nav-item">
+            <i class="fas fa-cog"></i>
+        </button>
+    </div>
+
+    <!-- Hidden elements for CSS/JS stability -->
+    <div id="tracking-panel" class="hidden"></div>
+    <div id="partner-panel" class="hidden"></div>
+
+    <!-- Profile Modal (Same as customer) -->
+    <div id="profile-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative">
+            <button onclick="closeModal('profile-modal')" class="absolute top-6 right-6 text-slate-400"><i class="fas fa-times"></i></button>
+            <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-3xl font-black mb-6 shadow-xl" id="profile-initials">?</div>
+            <div class="flex items-center gap-2 mb-1">
+                <h2 class="text-2xl font-black text-slate-800" id="profile-name">Partner</h2>
+            </div>
+            <p class="text-slate-500 font-medium mb-8 text-sm" id="profile-email"></p>
+            
+            <div id="worker-details" class="mb-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <p class="text-xl font-black text-slate-800" id="profile-skill"></p>
+                        <p class="text-indigo-600 font-black text-sm" id="profile-price"></p>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Experience</p>
+                    <p class="text-slate-700 font-bold text-sm"><span id="profile-experience"></span> Years</p>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">About</p>
+                    <p id="profile-bio" class="text-xs text-slate-500 leading-relaxed"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="logout()" class="w-full bg-rose-50 text-rose-600 py-3 rounded-2xl font-black uppercase tracking-widest text-[9px] border border-rose-100">Logout</button>
+                <div id="register-worker-prompt" class="hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sound -->
+    <audio id="ring-sound" loop src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        window.addEventListener('load', () => {
+             if (!localStorage.getItem('userEmail')) {
+                 window.location.href = '/';
+                 return;
+             }
+             localStorage.setItem('userRole', 'partner');
+             setInterval(loadPartnerDashboard, 5000);
+        });
+
+        // Swipe Logic (same as before but integrated)
+        function initSwipeButton(jobId, currentStatus) {
+            const container = document.getElementById('swipe-btn-' + jobId);
+            if (!container || container.dataset.init) return;
+            container.dataset.init = "true";
+            const handle = container.querySelector('.swipe-handle');
+            const maxTrack = container.offsetWidth - handle.offsetWidth - 8;
+            let startX = 0, isDragging = false;
+            const nextStatusMap = { 'Pending': 'Accepted', 'Accepted': 'On the Way', 'On the Way': 'Reached', 'Reached': 'Completed' };
+            
+            const onStart = (e) => { startX = (e.type === 'mousedown') ? e.pageX : e.touches[0].pageX; isDragging = true; handle.style.transition = 'none'; };
+            const onMove = (e) => {
+                if (!isDragging) return;
+                const currentX = (e.type === 'mousemove') ? e.pageX : e.touches[0].pageX;
+                let moveX = currentX - startX;
+                if (moveX < 0) moveX = 0; if (moveX > maxTrack) moveX = maxTrack;
+                handle.style.transform = `translateX(${moveX}px)`;
+                if (moveX >= maxTrack) onEnd(true);
+            };
+            const onEnd = (success = false) => {
+                if (!isDragging) return; isDragging = false;
+                handle.style.transition = 'transform 0.4s ease';
+                if (success) { updateJobStatus(jobId, nextStatusMap[currentStatus]); } 
+                else { handle.style.transform = 'translateX(0px)'; }
+            };
+            container.addEventListener('mousedown', onStart);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', () => onEnd(false));
+            container.addEventListener('touchstart', onStart, {passive: true});
+            window.addEventListener('touchmove', onMove, {passive: true});
+            window.addEventListener('touchend', () => onEnd(false));
+        }
+    </script>
+</body>
+
+</html>

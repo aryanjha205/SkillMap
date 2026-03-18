@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4F46E5">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/static/manifest/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/manifest/icon.svg">
+    <title>SkillMap | Customer Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --glass: rgba(255, 255, 255, 0.9);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #f8fafc;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+        }
+
+        .floating-top {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            z-index: 100;
+        }
+
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 20px;
+            left: 15px;
+            right: 15px;
+            height: 70px;
+            background: #fff;
+            border-radius: 35px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            padding: 0 10px;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #94a3b8;
+            font-size: 20px;
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+            background: #eef2ff;
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            justify-content: center;
+        }
+
+        .center-btn {
+            width: 55px;
+            height: 55px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            margin-top: -35px;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+        }
+
+        .filter-chip {
+            white-space: nowrap;
+            padding: 8px 18px;
+            border-radius: 20px;
+            background: white;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-right: 8px;
+            border: 1px solid transparent;
+        }
+
+        .filter-chip.active {
+            background: #1e293b;
+            color: white;
+        }
+
+        #recommendation-panel {
+            position: fixed;
+            bottom: 105px;
+            left: 15px;
+            right: 15px;
+            z-index: 100;
+        }
+
+        .ai-badge {
+            background: #eef2ff;
+            color: #4f46e5;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        /* Leaflet Controls Overrides */
+        .leaflet-top.leaflet-left { top: 180px; left: 10px; }
+        .leaflet-control-zoom { border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important; border-radius: 12px !important; overflow: hidden; }
+        .leaflet-control-zoom-in, .leaflet-control-zoom-out { background: white !important; color: #1e293b !important; font-weight: bold !important; border-bottom: 1px solid #f1f5f9 !important; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+
+<body class="overflow-hidden bg-slate-50">
+
+    <!-- Top Floating Section -->
+    <div class="floating-top space-y-3">
+        <!-- Logo & Brand -->
+        <div class="glass-card px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                    <i class="fas fa-map-marked-alt text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-none">SkillMap</h1>
+                    <span class="text-[9px] text-indigo-600 font-bold tracking-widest uppercase">Hyperlocal</span>
+                </div>
+            </div>
+            <button onclick="logout()" class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="glass-card flex items-center p-2 shadow-lg">
+            <i class="fas fa-search text-slate-400 ml-3 mr-2"></i>
+            <input type="text" id="skillSearch" placeholder="Search for Plumber, Electrician..."
+                class="bg-transparent border-none outline-none w-full py-2 text-slate-700 font-medium text-sm"
+                oninput="filterWorkers()">
+            <button class="bg-slate-800 text-white px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-widest">Filter</button>
+        </div>
+
+        <!-- Filter Chips -->
+        <div class="flex overflow-x-auto no-scrollbar py-1">
+            <button onclick="setFilter('All')" class="filter-chip active">All Skills</button>
+            <button onclick="setFilter('Plumber')" class="filter-chip">Plumber</button>
+            <button onclick="setFilter('Electrician')" class="filter-chip">Electrician</button>
+            <button onclick="setFilter('Tutor')" class="filter-chip">Tutor</button>
+            <button onclick="setFilter('Carpenter')" class="filter-chip">Carpenter</button>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- AI Suggestion Card -->
+    <div id="recommendation-panel" class="hidden">
+        <div class="glass-card p-4">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="ai-badge">AI Suggestion</span>
+                <span class="text-sm font-bold text-slate-800">Best Nearby</span>
+            </div>
+            <div id="best-worker-content">
+                <!-- Data from app.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <button onclick="window.location.reload()" class="nav-item active">
+            <i class="fas fa-home"></i>
+        </button>
+        <button onclick="showFeature('explore')" class="nav-item">
+            <i class="fas fa-compass"></i>
+        </button>
+        <div class="center-btn" onclick="openProfile()">
+            <i class="fas fa-user-circle"></i>
+        </div>
+        <button onclick="toggleTracking('user')" class="nav-item">
+            <i class="fas fa-briefcase"></i>
+        </button>
+        <button onclick="openProfile()" class="nav-item">
+            <i class="fas fa-cog"></i>
+        </button>
+    </div>
+
+    <!-- Tracking Overlay -->
+    <div id="tracking-panel" class="fixed inset-y-0 right-0 w-full md:w-96 glass-card z-[200] transform translate-x-full transition-transform duration-500 p-8 hidden flex flex-col">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-2xl font-black text-slate-800">My Bookings</h2>
+            <button onclick="toggleTracking('user')" class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="active-job-details" class="flex-1 overflow-y-auto no-scrollbar"></div>
+    </div>
+
+    <!-- Booking Modal -->
+    <div id="booking-modal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[300] items-center justify-center hidden flex-col p-6">
+        <div class="text-center w-full max-w-sm">
+            <div class="relative mb-8 w-40 h-40 mx-auto">
+                <div class="absolute inset-0 bg-indigo-600 rounded-[3rem] animate-ping opacity-10"></div>
+                <div class="relative bg-white/10 p-4 rounded-[3.5rem] border border-white/20">
+                    <img id="booking-photo" src="" class="w-32 h-32 rounded-[2.5rem] mx-auto object-cover">
+                </div>
+            </div>
+            <h2 class="text-white text-2xl font-black mb-1">Requesting <span id="booking-skill"></span></h2>
+            <p class="text-indigo-400 font-bold uppercase tracking-widest text-[9px] mb-8">Connecting with <span id="booking-name"></span></p>
+            <div class="text-white/80 font-bold mb-8 italic" id="booking-price"></div>
+            <button onclick="cancelBooking()" class="bg-white/10 text-white w-full py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs border border-white/10">Cancel Request</button>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4 hidden">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative">
+            <button onclick="closeModal('profile-modal')" class="absolute top-6 right-6 text-slate-400"><i class="fas fa-times"></i></button>
+            <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-3xl font-black mb-6 shadow-xl" id="profile-initials">?</div>
+            <div class="flex items-center gap-2 mb-1">
+                <h2 class="text-2xl font-black text-slate-800" id="profile-name">User</h2>
+                <span id="worker-badge" class="hidden"></span>
+            </div>
+            <p class="text-slate-500 font-medium mb-8 text-sm" id="profile-email"></p>
+            
+            <div id="worker-details" class="hidden mb-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <p class="text-xl font-black text-slate-800" id="profile-skill"></p>
+                        <p class="text-indigo-600 font-black text-sm" id="profile-price"></p>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Experience</p>
+                    <p class="text-slate-700 font-bold text-sm"><span id="profile-experience"></span> Years</p>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">About</p>
+                    <p id="profile-bio" class="text-xs text-slate-500 leading-relaxed"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="logout()" class="w-full bg-rose-50 text-rose-600 py-3 rounded-2xl font-black uppercase tracking-widest text-[9px] border border-rose-100">Logout</button>
+                <div id="register-worker-prompt" class="hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        window.addEventListener('load', () => {
+            const role = localStorage.getItem('userRole');
+            if (role !== 'customer') window.location.href = '/';
+        });
+
+        // Toggle chip active state
+        const chips = document.querySelectorAll('.filter-chip');
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>
