@@ -1,4 +1,4 @@
-const CACHE_NAME = 'skillmap-v2';
+const CACHE_NAME = 'skillmap-v3';
 const APP_SHELL = [
     '/',
     '/customer',
@@ -6,6 +6,8 @@ const APP_SHELL = [
     '/admin',
     '/manifest.json',
     '/static/js/app.js',
+    '/static/manifest/icon-192.png',
+    '/static/manifest/icon-512.png',
     '/static/manifest/icon.svg',
     '/static/manifest/icon-maskable.svg'
 ];

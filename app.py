@@ -9,7 +9,6 @@ from routes.admin_routes import admin_bp
 
 load_dotenv()
 
-from bson import ObjectId
 import json
 from utils.db import db_instance
 
@@ -35,7 +34,7 @@ def serve_sw():
 
 @app.route('/favicon.ico')
 def favicon():
-    return app.send_static_file('manifest/icon.svg')
+    return app.send_static_file('manifest/icon-192.png')
 
 # Register Blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')

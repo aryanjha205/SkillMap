@@ -1,14 +1,36 @@
 {
   "name": "SkillMap - Hyperlocal Talent Network",
   "short_name": "SkillMap",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "portrait-primary",
   "background_color": "#ffffff",
   "theme_color": "#4F46E5",
   "description": "Discover and hire local talent instantly with real-time map tracking.",
+  "categories": ["business", "productivity", "maps-navigation"],
+  "prefer_related_applications": false,
   "icons": [
+    {
+      "src": "/static/manifest/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/manifest/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/manifest/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
     {
       "src": "/static/manifest/icon.svg",
       "sizes": "any",

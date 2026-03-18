@@ -9,8 +9,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.json">
-    <link rel="icon" href="/static/manifest/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/static/manifest/icon.svg">
+    <link rel="icon" href="/static/manifest/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/static/manifest/icon-192.png">
+    <meta name="apple-mobile-web-app-title" content="SkillMap">
     <title>SkillMap | Hyperlocal Talent Network</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
@@ -33,6 +34,9 @@
         
         <button onclick="openAuthModal()" class="w-full bg-white text-indigo-600 py-6 rounded-[2rem] font-black uppercase tracking-widest text-sm shadow-2xl hover:scale-105 active:scale-95 transition-all">
             Get Started
+        </button>
+        <button id="install-app-btn" class="hidden w-full mt-4 bg-indigo-900/30 border border-white/30 text-white py-4 rounded-[1.5rem] font-bold tracking-wide backdrop-blur hover:bg-indigo-900/40 transition-all">
+            Install App
         </button>
     </div>
 

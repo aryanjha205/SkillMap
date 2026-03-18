@@ -11,10 +11,45 @@ let bookingState = null; // New variable
 let isTracking = false; // New variable
 let partnerOnline = true; // Global early declaration // New variable
 let partnerJobsCache = [];
+let deferredInstallPrompt = null;
 
 // Role enforcement logic
 const userRole = localStorage.getItem('userRole'); // New constant
 const currentPath = window.location.pathname; // New constant
+
+function isStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function updateInstallButton() {
+    const installBtn = document.getElementById('install-app-btn');
+    if (!installBtn) return;
+
+    const canInstall = Boolean(deferredInstallPrompt) && !isStandaloneMode();
+    installBtn.classList.toggle('hidden', !canInstall);
+}
+
+async function promptInstallApp() {
+    if (!deferredInstallPrompt) return;
+
+    deferredInstallPrompt.prompt();
+    const choiceResult = await deferredInstallPrompt.userChoice;
+    if (choiceResult.outcome === 'accepted') {
+        deferredInstallPrompt = null;
+    }
+    updateInstallButton();
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateInstallButton();
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    updateInstallButton();
+});
 
 // Initialize Map
 function initMap() {
@@ -218,25 +253,30 @@ async function updateJobStatusManual() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ job_id: activeJob.id, status: nextStatus })
         });
-
-        if (res.ok) {
-            activeJob.status = nextStatus;
-            updateTrackingUI(nextStatus);
-            
-            if (nextStatus === "Completed") {
-                alert("Work Finished! Bill sent to your email.");
-            } else if (nextStatus === "Paid") {
-                 setTimeout(() => {
-                    alert("Payment Successful! Receipt sent to your email.");
-                    toggleTracking('partner', false);
-                    activeJob = null;
-                }, 2000);
-            }
-            
-            renderStatusActionButton();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.error || "Status update failed");
         }
+
+        activeJob.status = nextStatus;
+        updateTrackingUI(nextStatus);
+
+        if (data.mail && !data.mail.success) {
+            alert(`Status updated, but email sending failed: ${data.mail.error}`);
+        } else if (nextStatus === "Completed") {
+            alert("Work finished. Bill PDF sent to the customer email.");
+        } else if (nextStatus === "Paid") {
+            setTimeout(() => {
+                alert("Payment successful. Receipt PDF sent to the customer email.");
+                toggleTracking('partner', false);
+                activeJob = null;
+            }, 2000);
+        }
+
+        renderStatusActionButton();
     } catch (err) {
         console.error("Status update error:", err);
+        alert(err.message || "Status update failed");
     }
 }
 
@@ -327,17 +367,23 @@ function hireWorker(id, name, skill, price, photo_url) {
             }
         })
     })
-    .then(res => res.json())
+    .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.error || data.message || 'Failed to send request');
+        }
+        return data;
+    })
     .then(data => {
         activeJob = data.job;
-        
+        alert(data.message || 'Request sent to partner successfully.');
         // Polling will handle closing the calling modal when status changes from Pending
         startStatusPolling();
     })
     .catch(err => {
         document.getElementById('booking-modal')?.classList.add('hidden');
         if (document.getElementById('booking-modal')) document.getElementById('booking-modal').style.display = 'none';
-        alert("Failed to initiate hiring");
+        alert(err.message || "Failed to initiate hiring");
     });
 }
 
@@ -560,7 +606,7 @@ async function loadPartnerDashboard() {
         const jobs = await res.json();
         partnerJobsCache = jobs;
         
-        const active = jobs.find(j => j.status !== 'Paid');
+        const active = jobs.find(j => !['Paid', 'Cancelled'].includes(j.status));
         const waitingView = document.getElementById('partner-waiting-view');
         const activeView = document.getElementById('partner-active-job-details');
 
@@ -675,10 +721,15 @@ async function updateJobStatus(jobId, status) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ job_id: jobId, status: status })
         });
-        if (res.ok) {
-            loadPartnerDashboard();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.error || "Status update failed");
         }
-    } catch (err) { alert("Status update failed"); }
+        if (data.mail && !data.mail.success) {
+            alert(`Status updated, but email sending failed: ${data.mail.error}`);
+        }
+        loadPartnerDashboard();
+    } catch (err) { alert(err.message || "Status update failed"); }
 }
 
 function openPartnerDirections(lat, lng) {
@@ -1063,6 +1114,12 @@ document.getElementById('worker-form')?.addEventListener('submit', async (e) => 
 
 // Start checking auth status
 window.addEventListener('load', async () => {
+    const installBtn = document.getElementById('install-app-btn');
+    if (installBtn) {
+        installBtn.addEventListener('click', promptInstallApp);
+        updateInstallButton();
+    }
+
     const hasMap = Boolean(document.getElementById('map'));
     if (hasMap) {
         initMap();
