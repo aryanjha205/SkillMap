@@ -17,11 +17,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-123')
 CORS(app)
 
-# Ensure uploads directory exists
-UPLOAD_FOLDER = os.path.join('static', 'uploads')
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
 # Custom JSON Provider to handle MongoDB ObjectId
 class CustomJSONProvider(Flask.json_provider_class):
     def dumps(self, obj, **kwargs):
