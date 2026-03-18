@@ -318,39 +318,6 @@
              localStorage.setItem('userRole', 'partner');
              setInterval(loadPartnerDashboard, 5000);
         });
-
-        // Swipe Logic (same as before but integrated)
-        function initSwipeButton(jobId, currentStatus) {
-            const container = document.getElementById('swipe-btn-' + jobId);
-            if (!container || container.dataset.init) return;
-            container.dataset.init = "true";
-            const handle = container.querySelector('.swipe-handle');
-            const maxTrack = container.offsetWidth - handle.offsetWidth - 8;
-            let startX = 0, isDragging = false;
-            const nextStatusMap = { 'Pending': 'Accepted', 'Accepted': 'On the Way', 'On the Way': 'Reached', 'Reached': 'Completed' };
-            
-            const onStart = (e) => { startX = (e.type === 'mousedown') ? e.pageX : e.touches[0].pageX; isDragging = true; handle.style.transition = 'none'; };
-            const onMove = (e) => {
-                if (!isDragging) return;
-                const currentX = (e.type === 'mousemove') ? e.pageX : e.touches[0].pageX;
-                let moveX = currentX - startX;
-                if (moveX < 0) moveX = 0; if (moveX > maxTrack) moveX = maxTrack;
-                handle.style.transform = `translateX(${moveX}px)`;
-                if (moveX >= maxTrack) onEnd(true);
-            };
-            const onEnd = (success = false) => {
-                if (!isDragging) return; isDragging = false;
-                handle.style.transition = 'transform 0.4s ease';
-                if (success) { updateJobStatus(jobId, nextStatusMap[currentStatus]); } 
-                else { handle.style.transform = 'translateX(0px)'; }
-            };
-            container.addEventListener('mousedown', onStart);
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', () => onEnd(false));
-            container.addEventListener('touchstart', onStart, {passive: true});
-            window.addEventListener('touchmove', onMove, {passive: true});
-            window.addEventListener('touchend', () => onEnd(false));
-        }
     </script>
 </body>
 

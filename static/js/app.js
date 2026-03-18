@@ -12,6 +12,7 @@ let isTracking = false; // New variable
 let partnerOnline = true; // Global early declaration // New variable
 let partnerJobsCache = [];
 let deferredInstallPrompt = null;
+let workersCache = [];
 
 // Role enforcement logic
 const userRole = localStorage.getItem('userRole'); // New constant
@@ -119,13 +120,15 @@ async function loadWorkers() {
     try {
         const res = await fetch('/api/workers/');
         const workers = await res.json();
-        renderMarkers(workers);
+        workersCache = Array.isArray(workers) ? workers : [];
+        renderMarkers(workersCache);
     } catch (err) {
         console.error("Load workers error:", err);
     }
 }
 
 function renderMarkers(workers) {
+    if (!map) return;
     // Clear existing
     markers.forEach(m => map.removeLayer(m));
     markers = [];
@@ -134,17 +137,34 @@ function renderMarkers(workers) {
     const userRole = localStorage.getItem('userRole');
     if (userRole === 'partner') return;
 
-    const filtered = currentFilter === 'All'
+    const normalizedFilter = (currentFilter || 'All').trim().toLowerCase();
+    const filtered = normalizedFilter === 'all'
         ? workers
-        : workers.filter(w => w.skill === currentFilter || w.name.toLowerCase().includes(currentFilter.toLowerCase()));
+        : workers.filter(w => {
+            const skill = (w.skill || '').toLowerCase();
+            const name = (w.name || '').toLowerCase();
+            const email = (w.email || '').toLowerCase();
+            return skill.includes(normalizedFilter) || name.includes(normalizedFilter) || email.includes(normalizedFilter);
+        });
 
     filtered.forEach(worker => {
-        const marker = L.marker([worker.lat, worker.lng], {
+        const lat = Number(worker.lat);
+        const lng = Number(worker.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const safePhoto = worker.photo_url || 'https://via.placeholder.com/150';
+        const safeName = worker.name || 'Partner';
+        const safeSkill = worker.skill || 'General Service';
+        const safePrice = Number(worker.price || 0);
+        const safeEmail = worker.email || '';
+        const safeRating = worker.rating || 5.0;
+
+        const marker = L.marker([lat, lng], {
             workerId: worker.id,
             icon: L.divIcon({
                 className: 'custom-div-icon',
                 html: `<div class="w-10 h-10 bg-white rounded-2xl shadow-lg border-2 border-indigo-500 overflow-hidden flex items-center justify-center">
-                        <img src="${worker.photo_url}" class="w-full h-full object-cover">
+                        <img src="${safePhoto}" class="w-full h-full object-cover">
                        </div>`,
                 iconSize: [40, 40],
                 iconAnchor: [20, 20]
@@ -157,25 +177,25 @@ function renderMarkers(workers) {
         const popupContent = `
             <div class="glass p-4 rounded-3xl w-64 shadow-2xl border-none">
                 <div class="flex gap-3 mb-3">
-                    <img src="${worker.photo_url}" class="w-16 h-16 rounded-2xl object-cover shadow-sm">
+                    <img src="${safePhoto}" class="w-16 h-16 rounded-2xl object-cover shadow-sm">
                     <div>
-                        <h4 class="font-bold text-slate-800 text-sm">${worker.name}</h4>
+                        <h4 class="font-bold text-slate-800 text-sm">${safeName}</h4>
                         <div class="flex items-center text-amber-500 text-[10px]">
-                            <i class="fas fa-star mr-1"></i> ${worker.rating} 
+                            <i class="fas fa-star mr-1"></i> ${safeRating}
                             <span class="text-slate-400 ml-1">(${worker.reviews_count || 12} reviews)</span>
                         </div>
-                        <p class="text-indigo-600 font-bold text-xs uppercase tracking-wider mt-0.5">${worker.skill}</p>
+                        <p class="text-indigo-600 font-bold text-xs uppercase tracking-wider mt-0.5">${safeSkill}</p>
                     </div>
                 </div>
                 <div class="flex justify-between items-center mb-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                     <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Rate</span>
-                    <span class="font-black text-slate-800 text-sm">₹${worker.price}/hr</span>
+                    <span class="font-black text-slate-800 text-sm">₹${safePrice}/hr</span>
                 </div>
                 <div class="${isCustomer ? 'grid grid-cols-2' : ''} gap-2">
-                    <button onclick="viewWorkerProfile('${worker.id}', '${worker.email}')" 
+                    <button onclick="viewWorkerProfile('${worker.id}', '${safeEmail}')" 
                             class="w-full bg-indigo-50 text-indigo-600 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-100 transition-all">View Profile</button>
                     ${isCustomer ? `
-                    <button onclick="hireWorker('${worker.id}', '${worker.name}', '${worker.skill}', '${worker.price}', '${worker.photo_url}')" 
+                    <button onclick="hireWorker('${worker.id}', '${safeName}', '${safeSkill}', '${safePrice}', '${safePhoto}')" 
                             class="bg-indigo-600 text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700">Book Now</button>
                     ` : ''}
                 </div>
@@ -193,6 +213,11 @@ function renderMarkers(workers) {
         });
         markers.push(marker);
     });
+
+    if (markers.length > 0) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds(), { padding: [60, 60] });
+    }
 }
 
 async function viewWorkerProfile(id, email) {
@@ -238,6 +263,128 @@ async function updateAIRecommendation() {
 
 // Hire & Tracking
 const statusFlow = ["Pending", "Accepted", "On the Way", "Reached", "Completed", "Paid"];
+
+const customerStatusMeta = {
+    "Pending": {
+        title: "Finding your partner",
+        subtitle: "Your request has been sent. Waiting for acceptance.",
+        eta: "Usually responds in under 1 min"
+    },
+    "Accepted": {
+        title: "Partner accepted",
+        subtitle: "Your partner is getting ready and preparing to move.",
+        eta: "Pickup prep started"
+    },
+    "On the Way": {
+        title: "Partner is on the way",
+        subtitle: "Live tracking is active. You can call your partner anytime.",
+        eta: "Arriving shortly"
+    },
+    "Reached": {
+        title: "Partner has arrived",
+        subtitle: "Your partner is at the location. Work can begin now.",
+        eta: "Reached your location"
+    },
+    "Completed": {
+        title: "Work completed",
+        subtitle: "Invoice has been sent to your email. Please complete payment.",
+        eta: "Awaiting payment"
+    },
+    "Paid": {
+        title: "Payment completed",
+        subtitle: "Receipt has been sent to your email. Booking closed successfully.",
+        eta: "All done"
+    }
+};
+
+const partnerStatusMeta = {
+    "Pending": {
+        label: "Swipe to accept booking",
+        helper: "New nearby request waiting for your approval"
+    },
+    "Accepted": {
+        label: "Swipe to start trip",
+        helper: "Head towards the customer location"
+    },
+    "On the Way": {
+        label: "Swipe when you arrive",
+        helper: "Keep the customer updated while travelling"
+    },
+    "Reached": {
+        label: "Swipe to finish work",
+        helper: "Complete the service and send the invoice"
+    },
+    "Completed": {
+        label: "Waiting for customer payment",
+        helper: "Invoice sent. Receipt will follow after payment."
+    }
+};
+
+function renderCustomerActiveJob(job) {
+    const container = document.getElementById('active-job-details');
+    if (!container || !job) return;
+
+    const meta = customerStatusMeta[job.status] || customerStatusMeta.Pending;
+    const customerSteps = [
+        { key: 'Pending', label: 'Request sent' },
+        { key: 'Accepted', label: 'Accepted' },
+        { key: 'On the Way', label: 'On the way' },
+        { key: 'Reached', label: 'Reached' },
+        { key: 'Completed', label: 'Work done' },
+        { key: 'Paid', label: 'Paid' }
+    ];
+
+    container.innerHTML = `
+        <div class="space-y-4">
+            <div class="bg-slate-900 text-white rounded-[2rem] p-5 shadow-xl">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-indigo-200">Live booking</p>
+                        <h3 class="text-2xl font-black mt-2">${meta.title}</h3>
+                        <p class="text-sm text-slate-300 mt-2">${meta.subtitle}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">ETA</p>
+                        <p class="text-sm font-black text-white mt-2">${meta.eta}</p>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center justify-between bg-white/10 rounded-2xl px-4 py-3">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-300">Service</p>
+                        <p class="font-black text-lg">${job.skill || 'Service'}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-300">Amount</p>
+                        <p class="font-black text-lg">Rs.${parseFloat(job.price || 0).toFixed(2)}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[2rem] border border-slate-100 p-5 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Assigned partner</p>
+                        <p class="text-lg font-black text-slate-800">${job.worker_name || 'Partner will be assigned'}</p>
+                    </div>
+                    <button onclick="window.location.href='tel:${job.worker_phone || ''}'" class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <i class="fas fa-phone-alt"></i>
+                    </button>
+                </div>
+                <div class="space-y-4">
+                    ${customerSteps.map((step) => `
+                        <div id="step-${step.key.toLowerCase().replace(/ /g, '') === 'ontheway' ? 'ontheway' : step.key.toLowerCase()}" class="flex items-start gap-3">
+                            <div id="indicator-${step.key.toLowerCase().replace(/ /g, '') === 'ontheway' ? 'ontheway' : step.key.toLowerCase()}" class="w-3 h-3 bg-slate-300 rounded-full mt-1"></div>
+                            <div>
+                                <p class="font-bold text-slate-800">${step.label}</p>
+                                <p id="time-${step.key.toLowerCase().replace(/ /g, '') === 'ontheway' ? 'ontheway' : step.key.toLowerCase()}" class="text-xs text-slate-400 font-medium">Waiting</p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
 
 async function updateJobStatusManual() {
     if (!activeJob) return;
@@ -376,6 +523,8 @@ function hireWorker(id, name, skill, price, photo_url) {
     })
     .then(data => {
         activeJob = data.job;
+        renderCustomerActiveJob(activeJob);
+        updateTrackingUI(activeJob.status || 'Pending');
         alert(data.message || 'Request sent to partner successfully.');
         // Polling will handle closing the calling modal when status changes from Pending
         startStatusPolling();
@@ -430,6 +579,8 @@ function startStatusPolling() {
 
                 if (current.status !== activeJob.status) {
                     activeJob.status = current.status;
+                    activeJob = current;
+                    renderCustomerActiveJob(activeJob);
                     updateTrackingUI(activeJob.status);
                     
                     if (activeJob.status !== 'Pending') {
@@ -621,15 +772,7 @@ async function loadPartnerDashboard() {
             waitingView?.classList.add('hidden');
             activeView?.classList.remove('hidden');
 
-            const nextStatusMap = {
-                'Pending': 'Swipe to Accept',
-                'Accepted': 'Swipe to Start Service',
-                'On the Way': 'Swipe to Confirm REACHED',
-                'Reached': 'Swipe to Complete Job',
-                'Completed': 'Awaiting Customer Payment'
-            };
-
-            const statusLabel = nextStatusMap[active.status] || 'Active Job';
+            const partnerStatus = partnerStatusMeta[active.status] || partnerStatusMeta.Pending;
 
             if (activeView) { // Safety check
                 activeView.innerHTML = `
@@ -644,6 +787,7 @@ async function loadPartnerDashboard() {
                                     <div class="flex-1">
                                         <h4 class="text-white font-black text-lg">${active.customer_name || active.customer_email.split('@')[0]}</h4>
                                         <p class="text-indigo-200 text-[10px] font-bold uppercase tracking-widest">${active.skill}</p>
+                                        <p class="text-white/80 text-xs font-bold mt-2">${partnerStatus.helper}</p>
                                     </div>
                                     <div class="text-right">
                                         <p class="text-[9px] text-white/50 font-black uppercase tracking-widest">Payout</p>
@@ -672,11 +816,11 @@ async function loadPartnerDashboard() {
 
                     <!-- Swipe Action Component -->
                     ${active.status !== 'Completed' ? `
-                        <div id="swipe-btn-${active.id}" class="swipe-container" onmouseover="initSwipeButton('${active.id}', '${active.status}')">
+                        <div id="swipe-btn-${active.id}" class="swipe-container">
                             <div class="swipe-handle">
                                 <i class="fas fa-chevron-right"></i>
                             </div>
-                            <div class="swipe-text">${statusLabel}</div>
+                            <div class="swipe-text">${partnerStatus.label}</div>
                         </div>
                     ` : `
                         <div class="fixed bottom-[105px] left-[15px] right-[15px] bg-emerald-500 text-white p-5 rounded-[2rem] text-center shadow-xl z-[100]">
@@ -686,6 +830,10 @@ async function loadPartnerDashboard() {
                 `;
             }
             
+            if (active.status !== 'Completed') {
+                setTimeout(() => initSwipeButton(active.id, active.status), 50);
+            }
+
             // Map sync
             if (map) {
                 const custLoc = active.customer_location || { lat: userLocation.lat + 0.002, lng: userLocation.lng + 0.002 };
@@ -934,14 +1082,14 @@ async function loadJobHistory() {
 
 function setFilter(skill) {
     currentFilter = skill;
-    loadWorkers();
+    renderMarkers(workersCache);
 }
 
 function filterWorkers() {
     const skillSearch = document.getElementById('skillSearch');
     const val = skillSearch ? skillSearch.value : '';
     currentFilter = val || 'All';
-    loadWorkers();
+    renderMarkers(workersCache);
 }
 
 // Auth flow
@@ -959,7 +1107,7 @@ function openAuthModal() {
 
 async function requestOTP() {
     const authEmail = document.getElementById('auth-email');
-    const email = authEmail ? authEmail.value : '';
+    const email = authEmail ? authEmail.value.trim().toLowerCase() : '';
     if (!email) return alert("Email required");
 
     try {
@@ -968,11 +1116,12 @@ async function requestOTP() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: email })
         });
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
             document.getElementById('otp-request')?.classList.add('hidden');
             document.getElementById('otp-verify')?.classList.remove('hidden');
         } else {
-            alert("Error sending OTP");
+            alert(data.error || "Error sending OTP");
         }
     } catch (err) {
         alert("Server error");
@@ -982,8 +1131,8 @@ async function requestOTP() {
 async function verifyOTP() {
     const authEmail = document.getElementById('auth-email');
     const authOtp = document.getElementById('auth-otp');
-    const email = authEmail ? authEmail.value : '';
-    const otp = authOtp ? authOtp.value : '';
+    const email = authEmail ? authEmail.value.trim().toLowerCase() : '';
+    const otp = authOtp ? authOtp.value.trim() : '';
 
     try {
         const res = await fetch('/api/auth/verify-otp', {
@@ -1185,9 +1334,10 @@ window.addEventListener('load', async () => {
             fetch(`/api/jobs/customer/${email}`)
                 .then(res => res.json())
                 .then(jobs => {
-                    const active = jobs.find(j => j.status !== 'Paid');
+                    const active = jobs.find(j => !['Paid', 'Cancelled'].includes(j.status));
                     if (active) {
                         activeJob = active;
+                        renderCustomerActiveJob(activeJob);
                         updateTrackingUI(activeJob.status);
                         startStatusPolling();
                         toggleTracking('user', true);

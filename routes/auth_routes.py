@@ -52,21 +52,22 @@ def clear_otp(email):
 @auth_bp.route('/send-otp', methods=['POST'])
 def send_otp():
     data = request.json
-    email = data.get('email')
+    email = (data.get('email') or '').strip().lower()
     if not email:
         return jsonify({"error": "Email is required"}), 400
     
     otp = generate_otp()
-    if send_otp_email(email, otp):
+    send_result = send_otp_email(email, otp)
+    if send_result.get("success"):
         save_otp(email, otp)
         return jsonify({"message": "OTP sent successfully"})
-    return jsonify({"error": "Failed to send OTP"}), 500
+    return jsonify({"error": send_result.get("error", "Failed to send OTP")}), 500
 
 @auth_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():
     data = request.json
-    email = data.get('email')
-    otp = data.get('otp')
+    email = (data.get('email') or '').strip().lower()
+    otp = (data.get('otp') or '').strip()
     
     if read_otp(email) == otp:
         token = create_token(email)
